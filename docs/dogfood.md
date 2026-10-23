@@ -4,6 +4,12 @@
 
 The initial source provides a stdio MCP bridge, authenticated loopback transport, explicit grants, document-bound element handles and a fictional fixture. Source/harness checks do not establish a working Safari installation. Apple FM client verification is recorded in its own README. Public binaries and App Store distribution are not part of this checkpoint.
 
+## Verified in this source checkpoint
+
+Nine Node tests and JavaScript syntax checks passed, including authenticated transport, ungranted-tab denial, navigation/Stop revocation, stale document handles, and rejection of commands from a previous grant after Stop/regrant. The Apple FM client compiled and an actual on-device request invoked MCP list_tabs once against an empty broker; generated content and pairing token were suppressed.
+
+Apple's converter flags were verified, but actual packaging failed on sandbox path access. The elevated conversion retry was aborted; no Xcode project, unsigned app, installed extension, or live tab-control result was established. Next action is authorizing the documented converter command, then building/loading under the intended development identity and verifying the fictional fixture. No Safari permission settings were changed.
+
 ## First real Safari session
 
 1. Build the containing app with the intended development identity; enable the extension and approve access only for the fictional local test page. Pair its popup with the bridge's private session token.
