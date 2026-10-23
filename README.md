@@ -6,7 +6,7 @@
 
 Let local agents work in ordinary open Safari tabs, using the sessions already in those tabs. The intended workflow is automatic connection and tab discovery after Safari website permission is enabled: no token copying, per-tab Allow button or popup that must stay open. An early MIT development preview for Codex, Claude Code, and Apple Foundation Models.
 
-**Current status:** signed preview **0.2.1** is installed; all **37 bundle files** match and strict signature verification passed. Twenty-one Node tests passed, the Apple FM client recompiled, the signed native helper's private storage roundtrip passed, and Safari accepted the window-free containing-app wake dispatch. Automatic Safari tab operations and closed-popup recovery remain unverified while initial website permission is pending. Public installer distribution is separate. See [the dogfood record](docs/dogfood.md).
+**Current status:** signed preview **0.2.2** is installed with **37 matching bundle files** and a valid strict signature. Twenty-two Node tests pass. With the popup closed, a real Safari test automatically discovered, read, typed into and clicked the fictional form, then reconnected after navigation and rejected an old handle. Apple's on-device model also invoked `list_tabs` and `read_page` through a fixture-only wrapper. Long idle/sleep and Safari relaunch remain separate checks. Public installer distribution is separate. See [the dogfood record](docs/dogfood.md).
 
 ## How it fits together
 

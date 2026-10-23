@@ -6,7 +6,7 @@ Enable the installed extension and grant Safari's website access once for the si
 
 The current extension scans only the first 500 browser-query results, then applies eligibility checks; the discovery snapshot is cached for at most five seconds and invalidated immediately by relevant browser events. This limit is not a promise that every tab beyond the cap is visible. Safari still owns website permissions. Private windows and unsupported URLs are excluded. Technical availability does not authorize an agent to purchase, send messages or make unrelated account changes; the human's task supplies that scope. Page data is untrusted input.
 
-The current signed 0.2.1 preview is installed, with 37 matching bundle files and strict signature verification. Signed native descriptor publish/read-match/remove passed. Those checks establish build, installation and private storage access; automatic Safari tab operations and closed-popup recovery remain unverified. See [the dogfood record](dogfood.md).
+The current signed 0.2.2 preview is installed, with 37 matching bundle files and strict signature verification. Signed native storage access, automatic real Safari form operations with the popup closed, navigation rediscovery, stale-handle rejection and an on-device Apple FM fixture read passed. Long idle/sleep, Safari relaunch and full real-browser Stop/restart checks remain open. See [the dogfood record](dogfood.md).
 
 ## Connection path
 

@@ -13,7 +13,7 @@ input.on('line', async line => {
   if (msg.id === undefined) return;
   const reply = result => send({jsonrpc:'2.0',id:msg.id,result});
   try {
-    if (msg.method === 'initialize') reply({protocolVersion:'2024-11-05',capabilities:{tools:{}},serverInfo:{name:'safari-agent',version:'0.2.1'}});
+    if (msg.method === 'initialize') reply({protocolVersion:'2024-11-05',capabilities:{tools:{}},serverInfo:{name:'safari-agent',version:'0.2.2'}});
     else if (msg.method === 'ping') reply({});
     else if (msg.method === 'tools/list') reply({tools});
     else if (msg.method === 'tools/call') {

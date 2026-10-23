@@ -4,7 +4,19 @@
 
 The requested workflow is now automatic connection and discovery of ordinary open HTTP(S) tabs, using Safari's website permissions. No session token copying, per-tab Allow button or persistent popup is part of the intended flow. Private windows stay excluded; Stop persists until Resume. [Architecture](architecture.md) records the selected native connection path.
 
-The corrected native storage implementation is built and installed. A real automatic Safari tab round trip and reliable popup-free wakeup remain unverified. Public binaries and App Store distribution remain separate.
+The corrected native implementation is built and installed, and the first real Safari form round trip passed with the popup closed. Long idle/sleep and Safari relaunch remain separate checks. Public binaries and App Store distribution remain separate.
+
+## Real Safari acceptance — 0.2.2
+
+After the operator approved Safari website access and closed the popup, the bridge connected automatically. The first real trial exposed a custom-port bug: permission checks used URL origins containing a port, which Safari rejects as an invalid match-pattern host. A direct check using the installed WebKit API rejected the port-containing pattern and accepted the host-only pattern. Preview 0.2.2 checks scheme/hostname permissions while preserving the full tab URL and document identity. A regression check covers the localhost case; 22 Node tests pass.
+
+The signed preview 0.2.2/build 202 installed with 37 matching bundle files and strict signature verification. With the popup still closed, the fictional form appeared automatically. The test read it, typed Ada, clicked Preview greeting, and verified Hello Ada. Navigation automatically established fresh document access without an Allow step; a control handle from the old document was rejected, and reading the new document succeeded. Only the fictional localhost form was operated.
+
+An actual on-device Foundation Models request then called `list_tabs` and `read_page` and correctly identified the fixture title and Name input label. A temporary read-only MCP wrapper exposed only the fictional form and blocked every other tab and mutation tool. Its receipt recorded two listing calls (including pre-inference discovery) and one page read; generated prose alone was not used as proof.
+
+After both test clients disconnected, the unused daemon exited and its private descriptor disappeared. A fresh client automatically started a new daemon, rediscovered the same fictional tab and read it with the popup still closed. That startup/discovery/read sequence took 2,065 ms in this trial. This establishes one idle-daemon reconnect, not a guarantee about recovery after system sleep or Safari relaunch.
+
+Persistent Stop/Resume, denied/private tab boundaries and in-flight fencing have source regression coverage; their full real-browser restart checks remain open. Popup closure in this trial does not establish overnight sleep or Safari relaunch recovery.
 
 ## Current verified checkpoint — 0.2.1
 

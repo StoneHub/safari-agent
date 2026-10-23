@@ -49,7 +49,7 @@ test('MCP stdio initializes and advertises automatic-tab tools without starting 
  t.after(()=>{child.stdin.end();child.kill();});
  const responses=readline.createInterface({input:child.stdout})[Symbol.asyncIterator]();
  const request=async(id,method,params)=>{child.stdin.write(JSON.stringify({jsonrpc:'2.0',id,method,params})+'\n');return JSON.parse((await responses.next()).value);};
- assert.equal((await request(1,'initialize',{})).result.serverInfo.version,'0.2.1');
+ assert.equal((await request(1,'initialize',{})).result.serverInfo.version,'0.2.2');
  const tools=(await request(2,'tools/list')).result.tools;
  assert.deepEqual(tools.map(t=>t.name),['list_tabs','read_page','click','type','navigate']);
  assert.match(tools[0].description,/open Safari/);

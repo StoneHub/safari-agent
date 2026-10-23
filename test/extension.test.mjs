@@ -9,7 +9,7 @@ const flush = async () => { for(let i=0;i<80;i++) await Promise.resolve(); };
 const popup = {id:'fixture',url:'safari-web-extension://fixture/popup.html'};
 function deferred() { let resolve; const promise=new Promise(r=>resolve=r); return {promise,resolve}; }
 async function harness(options={}) {
- let listener, removed, updated, interval, nativeMessage, nativeDisconnected; const sent = [], requests = [], nativeCalls = [], injections = [];
+ let listener, removed, updated, interval, nativeMessage, nativeDisconnected; const sent = [], requests = [], nativeCalls = [], injections = [], permissionChecks = [];
  const stored = options.stored || {};
  const tab = {id:7,url:'https://example.test/form',title:'Synthetic fixture',incognito:false,status:'complete'};
  const tabs = options.tabs || [tab];
@@ -19,7 +19,7 @@ async function harness(options={}) {
  const browser = {
   runtime:{id:'fixture',getURL:path=>'safari-web-extension://fixture/'+path,onMessage:{addListener:f=>listener=f},onStartup:events(),onInstalled:events(),connectNative:()=>({onMessage:{addListener:f=>nativeMessage=f},onDisconnect:{addListener:f=>nativeDisconnected=f},disconnect:()=>nativeDisconnected?.()}),sendNativeMessage:async(app,msg)=>{nativeCalls.push({app,msg});return options.nativeReply || {ok:true,version:1,token:'a'.repeat(64),port:19447};}},
   storage:{local:{get:async defaults=>({...defaults,...stored}),set:async value=>Object.assign(stored,value)}},
-  permissions:{contains:async({origins})=>!origins.some(origin=>origin.startsWith('https://denied.test')),onRemoved:events(),onAdded:events()},
+  permissions:{contains:async({origins})=>{permissionChecks.push(...origins);return options.permissionCheck ? options.permissionCheck(origins) : !origins.some(origin=>origin.startsWith('https://denied.test'));},onRemoved:events(),onAdded:events()},
   tabs:{onCreated:events('created'),onActivated:events(),onRemoved:{addListener:f=>removed=f},onUpdated:{addListener:f=>updated=f},get:async id=>({...tabs.find(t=>t.id===id)}),query:async()=>{counts.queries++;return tabs.map(t=>({...t}));},update:async(id,{url})=>{tab.url=url;tab.status='loading';updated(id,{url,status:'loading'});},sendMessage:async(id,msg)=>{sent.push(msg);if(msg.kind==='identify')return documentId; if(holdResult){const gate=holdResult;holdResult=null;await gate.promise;}return {text:'Fixture'};}},
   scripting:{executeScript:async options=>{injections.push(options);}}
  };
@@ -30,7 +30,7 @@ async function harness(options={}) {
   return {ok:true,json:async()=>({commands:batch})};
  }});
  await flush();
- return {tab,tabs,sent,requests,stored,nativeCalls,injections,counts,
+ return {tab,tabs,sent,requests,stored,nativeCalls,injections,counts,permissionChecks,
   advance:ms=>{now+=ms;},
   create:async newTab=>{tabs.push(newTab);eventListeners.created(newTab);await flush();},
   send:(msg,sender=popup)=>listener(msg,sender),
@@ -52,6 +52,13 @@ test('normal permitted tabs appear automatically; no page can pair or change acc
  await assert.rejects(h.send({kind:'pair',token:'bad',port:1234}),/Unsupported/);
  assert.ok(h.requests.every(r=>r.url==='http://127.0.0.1:19447/sync'));
  assert.ok(!JSON.stringify(h.stored).includes('aaaa'), 'never persist native credentials');
+});
+test('custom-port tabs use Safari-compatible host patterns without changing their document URL',async()=>{
+ const url='http://127.0.0.1:19448/form.html';
+ const h=await harness({tabs:[{id:7,url,incognito:false,status:'complete'}],permissionCheck:origins=>origins.every(pattern=>pattern==='http://127.0.0.1/*')});
+ assert.equal(h.requests.at(-1).tabs[0].url,url);
+ assert.ok(h.permissionChecks.length>0);
+ assert.ok(h.permissionChecks.every(pattern=>pattern==='http://127.0.0.1/*'));
 });
 test('idle syncs reuse discovery for five seconds but new tabs and navigation refresh immediately',async()=>{
  const h=await harness();

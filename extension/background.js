@@ -12,7 +12,12 @@ const safeURL = url => {
 const normalTab = tab => Number.isInteger(tab?.id) && tab.incognito === false && safeURL(tab.url) && tab.status !== 'loading';
 async function hostAllowed(url) {
   if (!safeURL(url)) return false;
-  try { return await browser.permissions.contains({origins:[new URL(url).origin + '/*']}); }
+  try {
+    // Safari match-pattern hosts cannot contain a port. Host permissions cover
+    // all ports; the actual tab URL remains unchanged for document checks.
+    const parsed = new URL(url);
+    return await browser.permissions.contains({origins:[`${parsed.protocol}//${parsed.hostname}/*`]});
+  }
   catch { return false; }
 }
 const current = epoch => epoch === generation && !stopped;
