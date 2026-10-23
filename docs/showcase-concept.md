@@ -11,10 +11,10 @@ The useful first page is a simple directory: what each tool does, where its sour
 | Apple FM Swift | Native on-device FoundationModels library and helper | [Repository](https://github.com/StoneHub/apple-fm-swift) · [Releases](https://github.com/StoneHub/apple-fm-swift/releases) |
 | Apple FM Terminal | Request-only shell assistance; Tab inserts and a separate Enter executes | [Repository](https://github.com/StoneHub/apple-fm-terminal) · [Releases](https://github.com/StoneHub/apple-fm-terminal/releases) |
 | Apple FM VS Code | Local inline suggestions, refactors and explicit image questions | [Repository](https://github.com/StoneHub/apple-fm-vscode) · [Releases](https://github.com/StoneHub/apple-fm-vscode/releases) |
-| Safari Agent | MCP access to explicitly granted Safari tabs, with an optional read-only Apple FM client | [Repository](https://github.com/StoneHub/safari-agent) · [Releases](https://github.com/StoneHub/safari-agent/releases) |
+| Safari Agent | Automatic MCP access to ordinary Safari tabs within Safari website permissions, with an optional read-only Apple FM client | [Repository](https://github.com/StoneHub/safari-agent) · [Releases](https://github.com/StoneHub/safari-agent/releases) |
 | Android OTP for Safari | On-device Foundation Models extraction for Google Messages previews | [Repository](https://github.com/StoneHub/android-otp-for-safari) · [Releases](https://github.com/StoneHub/android-otp-for-safari/releases) |
 
-Swift supplies reusable local generation. Terminal and VS Code are independently usable interfaces; Safari Agent offers a separately authorized browser integration. Android OTP independently invokes Apple Foundation Models for code extraction. Sharing a directory does not combine their permissions or update paths.
+Swift supplies reusable local generation. Terminal and VS Code are independently usable interfaces; Safari Agent offers an optional browser integration with system website permissions and persistent Stop/Resume. Its signed 0.2.1 build and private native storage round trip are verified; automatic Safari operations and popup-free recovery still need runtime acceptance. Android OTP independently invokes Apple Foundation Models for code extraction. Sharing a directory does not combine their permissions or update paths.
 
 ## Page content
 

@@ -1,18 +1,18 @@
 # Safari Agent
 
-![Safari Agent — local tools with explicit access](docs/assets/banner.svg)
+![Safari Agent — local tools for Safari](docs/assets/banner.svg)
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-73dcc1)](LICENSE) [![Status: development preview](https://img.shields.io/badge/status-development_preview-193d49)](docs/dogfood.md)
 
-Let local agents work in Safari tabs you explicitly allow, using the session already in that tab. An early MIT development preview for dogfooding with Codex, Claude Code, and Apple Foundation Models.
+Let local agents work in ordinary open Safari tabs, using the sessions already in those tabs. The intended workflow is automatic connection and tab discovery after Safari website permission is enabled: no token copying, per-tab Allow button or popup that must stay open. An early MIT development preview for Codex, Claude Code, and Apple Foundation Models.
 
-**Current status:** development preview. A signed local build is installed and launches successfully. The first granted-tab round trip is the next acceptance check. Public installer distribution remains pending. See [the dogfood checklist](docs/dogfood.md).
+**Current status:** signed preview **0.2.1** is installed; all **37 bundle files** match and strict signature verification passed. Twenty-one Node tests passed, the Apple FM client recompiled, the signed native helper's private storage roundtrip passed, and Safari accepted the window-free containing-app wake dispatch. Automatic Safari tab operations and closed-popup recovery remain unverified while initial website permission is pending. Public installer distribution is separate. See [the dogfood record](docs/dogfood.md).
 
 ## How it fits together
 
-An agent connects to a local Node.js MCP server over stdio. The Safari web extension polls its authenticated loopback endpoint and performs bounded commands in user-granted tabs. The containing Mac app packages the Safari extension; the prototype transport does not require a separate native messaging host or a cloud service.
+An agent connects to the local Node.js MCP entry point over stdio; its facade leases a shared local bridge daemon, starting it when needed. Node exchanges private descriptor data over stdio with its signed embedded helper, which accesses a Team-prefixed macOS App Group. The Safari native extension reads that same store and supplies connection details to background JavaScript, which uses authenticated loopback transport. Node never accesses protected group storage directly. Ordinary HTTP(S) tabs with Safari-granted website access become available automatically; private windows and unsupported pages are excluded. The popup shows status and Stop/Resume controls. [Architecture and lifecycle](docs/architecture.md) describes the current design and its verification boundaries.
 
-Tools: `list_tabs`, `read_page`, `click`, `type`, and `navigate`. Page reads return text and opaque handles for visible controls. Actions target those handles instead of replaying CSS selectors. Navigation revokes access. Password/file fields cannot be typed through this preview. Page text is untrusted content, never authorization.
+Tools: `list_tabs`, `read_page`, `click`, `type`, and `navigate`. Page reads return text and opaque handles for visible controls. Actions target those handles instead of replaying CSS selectors. Navigation invalidates old document identities and element handles; an eligible new document is discovered automatically. Password/file fields cannot be typed through this preview. Page text is untrusted content, never authorization.
 
 ## Develop
 
@@ -24,19 +24,37 @@ npm test
 node src/server.mjs
 ```
 
-The bridge listens on `127.0.0.1:19447`; override with `SAFARI_AGENT_PORT`. It generates a private session pairing token and displays it on stderr for the local operator. Never paste it into a chat, issue, or shared log. An MCP client may retain stderr logs: review its logging policy. Set `SAFARI_AGENT_TOKEN` privately to avoid displaying the generated token. Each bridge owns its port; multiple clients need separate ports/pairings. No multi-agent tab arbitration exists yet.
+The bridge uses loopback transport. Connection credentials belong to local infrastructure and are delivered through the native extension channel; they are not a setup step for the user. Tokens, page text, URLs and titles must stay out of shared logs. Safari website access remains an operating-system permission that this repository cannot grant for you.
+
+The current extension scans at most the first 500 browser-query results before eligibility filtering, with a five-second discovery cache and immediate event invalidation. Multiple simultaneous MCP clients and ownership of mutable browser work must be verified before treating this preview as a shared agent service. Technical access to tabs does not arbitrate competing agents or approve their actions.
 
 ## Package for local development
 
+The icon assets are committed. Regenerate them only when changing the artwork:
+
 ```sh
-python3 scripts/generate-safari-project.py
+swift scripts/generate-icons.swift
 ```
 
-The helper also corrects the containing-app identifier normalization in Safari 27’s converter. Generated sources and personal signing settings stay ignored under `.build/`. Use the generated project with your own development identity. Installing/enabling it and granting website access are separate steps. Do not publish development-signing details or bypass system security controls. This repository does not enable Safari settings automatically.
+Build with an existing private local signing configuration:
 
-To install from the current build, resolve build settings with the same project, scheme, configuration, destination, DerivedData and signing arguments, adding `-showBuildSettings -json`. Pass that JSON to `python3 scripts/install-preview.py --build-settings /path/to/current-settings.json`. The installer validates identity/signatures, compares every installed file, preserves rollback until verification, and registers only this product. It refuses a running setup app. Safari website access remains a separate user step.
+```sh
+python3 scripts/build-preview.py --xcconfig /absolute/path/to/private-signing.xcconfig
+```
 
-Once loaded, pair through the extension popup using the local port/session token, open a fictional HTTP fixture tab, and select **Allow current tab**. **Stop all tab access** revokes grants. Keep the popup open for initial trials: Safari may suspend its nonpersistent background page; suspension/restart loses the memory-only pairing and grants. This is an intentional fail-closed prototype, not persistent background automation.
+This helper generates the project, stages the reviewed native connection handler and expanded group metadata, builds the extension, embeds/signs the native storage helper and verifies group/version metadata and the app signature. The containing-app wake entry is a separate lifecycle path whose Safari delivery still needs acceptance. It saves settings resolved from that exact build to `.build/safari-agent-build-settings.json`. Signing configuration and generated outputs remain local and ignored; never commit account or development-signing details.
+
+For packaging inspection without a build, use `python3 scripts/generate-safari-project.py`; generation also runs `scripts/stage-native-handler.py`. If the native handler changes after generation, rerun the stage script before an independent Xcode build. The generator corrects the containing-app identifier normalization in Safari 27's converter. Generated sources are task-owned and regenerated; keep durable changes in repository sources.
+
+Install from the helper's current-build settings:
+
+```sh
+python3 scripts/install-preview.py --build-settings .build/safari-agent-build-settings.json
+```
+
+The installer validates identity/signatures, compares every installed file, preserves rollback until verification and registers only this product. It refuses a running setup app. For a custom Xcode invocation, resolve `-showBuildSettings -json` with the same project, scheme, configuration, destination, DerivedData and signing arguments; never substitute an old product. Safari extension enablement and website permissions are separate user-controlled steps. This repository does not enable them or bypass system security controls.
+
+Once the new build is loaded and Safari website permission is approved, open the fixture and connect an agent. Connection and eligible-tab discovery should happen automatically. The toolbar popup is optional status/control UI; it must not be required to keep the connection alive. **Stop** should persist until **Resume**, including across extension background restarts. Live acceptance of those behaviors is tracked in [issue #1](https://github.com/StoneHub/safari-agent/issues/1).
 
 ## Agent clients
 
@@ -46,9 +64,9 @@ Apple Foundation Models integration lives in [clients/apple-fm](clients/apple-fm
 
 ## Scope and privacy
 
-Only explicitly granted tabs are sent to the bridge. Page content stays in memory in this implementation and is returned to the connected agent; the agent/model's own processing and retention rules still apply. Codex or Claude may process it remotely; using the Apple FM client keeps inference on-device. Existing website traffic remains unchanged. Pairing tokens, granted URLs/titles, and page content are sensitive.
+Eligible ordinary tabs may expose their URLs and titles to connected clients automatically. Page bodies are retrieved through page-reading tools. Private windows are excluded; Safari site permission, Stop and extension disablement remain access boundaries. Page content stays in memory in this implementation and is returned to the connected agent; the agent/model's own processing and retention rules still apply. Codex or Claude may process it remotely; using the Apple FM client keeps inference on-device. Existing website traffic remains unchanged. Local connection credentials, URLs/titles and page content are sensitive.
 
-Screenshots, scrolling tools, iframe/shadow-DOM coverage, trusted native input, file pickers, downloads/uploads, network interception, persistent sessions, and multi-agent ownership are not implemented. DOM clicks can cause external side effects; a technical tab grant does not approve a purchase, message, or account change. A timed-out action may already have happened: inspect before retrying.
+Screenshots, scrolling tools, iframe/shadow-DOM coverage, trusted native input, file pickers, downloads/uploads, network interception, a guarantee of continuous background execution, and multi-agent ownership are outside the current verified capability. DOM clicks can cause external side effects; automatic technical access does not approve a purchase, message or account change. A timed-out action may already have happened: inspect before retrying.
 
 [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [MIT License](LICENSE) · [Issues](https://github.com/StoneHub/safari-agent/issues)
 
@@ -60,7 +78,7 @@ Screenshots, scrolling tools, iframe/shadow-DOM coverage, trusted native input, 
 | [Apple FM Terminal](https://github.com/StoneHub/apple-fm-terminal) | Request-only shell assistance and explicit Safari questions |
 | [Apple FM VS Code](https://github.com/StoneHub/apple-fm-vscode) | Local model support in the editor |
 | [Android OTP for Safari](https://github.com/StoneHub/android-otp-for-safari) | On-device code extraction from Google Messages previews |
-| Safari Agent | Explicit tab tools shared by model clients |
+| Safari Agent | Safari tab tools shared by model clients |
 
 Each project remains independently usable. See each repo’s Releases and current installation status; a public source repository does not imply a notarized binary.
 

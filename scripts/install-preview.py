@@ -57,6 +57,9 @@ try:
         raise
     source_apex=source/'Contents/PlugIns'/apex.name
     subprocess.run(['pluginkit','-r',str(source_apex)],check=True)
+    launchservices='/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister'
+    subprocess.run([launchservices,'-u',str(source)],check=True)
+    subprocess.run([launchservices,'-f',str(destination)],check=True)
     print(json.dumps({'installed':str(destination),'matchingFiles':len(expected),'strictSignature':True,'browserPermissionsChanged':False}))
 finally:
     if not keep:shutil.rmtree(stage)

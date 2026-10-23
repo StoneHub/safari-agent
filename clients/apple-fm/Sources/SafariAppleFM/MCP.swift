@@ -3,7 +3,7 @@ import Darwin
 
 enum BridgeError: Error { case unavailable, invalidResponse, timeout, rejected }
 
-/// One owned stdio server, bounded replies, and serialized requests. No page/token logs.
+/// One owned stdio facade, bounded replies, and serialized requests. No page/token logs.
 final class MCP: @unchecked Sendable {
     private let process = Process()
     private let input = Pipe()
@@ -21,7 +21,7 @@ final class MCP: @unchecked Sendable {
         process.arguments = [server]
         process.standardInput = input
         process.standardOutput = output
-        // Pairing instructions/token are private terminal output, never an adapter log.
+        // Connection diagnostics stay in the private terminal; no credential setup UI.
         process.standardError = FileHandle.standardError
         try process.run()
         do {
