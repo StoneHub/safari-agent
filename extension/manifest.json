@@ -1,0 +1,1 @@
+{"manifest_version":3,"name":"Safari Agent","version":"0.1.0","description":"Explicit tab access for a local agent bridge. Development prototype.","permissions":["activeTab","scripting","storage"],"host_permissions":["http://127.0.0.1/*"],"background":{"scripts":["background.js"],"persistent":false},"action":{"default_popup":"popup.html","default_title":"Safari Agent access"}}
