@@ -8,7 +8,9 @@ The initial source provides a stdio MCP bridge, authenticated loopback transport
 
 Nine Node tests and JavaScript syntax checks passed, including authenticated transport, ungranted-tab denial, navigation/Stop revocation, stale document handles, and rejection of commands from a previous grant after Stop/regrant. The Apple FM client compiled and an actual on-device request invoked MCP list_tabs once against an empty broker; generated content and pairing token were suppressed.
 
-Apple's converter flags were verified, but actual packaging failed on sandbox path access. The elevated conversion retry was aborted; no Xcode project, unsigned app, installed extension, or live tab-control result was established. Next action is authorizing the documented converter command, then building/loading under the intended development identity and verifying the fictional fixture. No Safari permission settings were changed.
+The initial converter attempt was blocked by sandbox path access. On October 23, normal host access and an absolute extension path generated the project. The generated containing-app identifier used different capitalization from the extension prefix, causing the first signed build to fail; `scripts/generate-safari-project.py` corrects that reproducibly. The corrected development-signed Debug build passed.
+
+The exact current-build product was installed in Applications. All 24 bundle files match, strict signature verification passed, and the launched executable path and hash matched the installed product. Browser permissions were unchanged. First live tab control remains pending explicit enablement and fixture grant; installation alone does not establish it.
 
 ## First real Safari session
 
