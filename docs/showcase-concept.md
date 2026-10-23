@@ -31,4 +31,4 @@ Use the repositories as the source of truth. Source documentation can move quick
 
 First useful dogfood check: a reader can choose the right project, distinguish the current public release from newer unreleased work, and reach its actual installation instructions and issue tracker without asking which repository is canonical.
 
-This concept incorporates a bounded Claude Sonnet brainstorm run through T3 Code, followed by human-agent review. The brainstorm used supplied public project descriptions only. Suggestions were corrected to keep Android OTP separate from Apple FM and to avoid unsupported blanket claims about every project's signing or distribution status.
+This concept incorporates a bounded Claude Sonnet brainstorm run through T3 Code, followed by human-agent review. The brainstorm used supplied public project descriptions only. Suggestions were corrected to describe Android OTP's direct Foundation Models use and each project's permissions, signing and distribution status accurately.
