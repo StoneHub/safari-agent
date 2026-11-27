@@ -1,0 +1,49 @@
+<!doctype html><meta charset="utf-8"><title>Safari Agent widget fixture</title>
+<style>
+  .tabs{display:flex;gap:8px}.tab{padding:6px 10px;border:1px solid #888;cursor:pointer}.tab[aria-selected="true"]{background:#def}
+  .panel{margin:8px 0}.select{display:inline-block;border:1px solid #888;min-width:140px}.trigger{padding:6px}
+  .overlay{position:absolute;background:#fff;border:1px solid #888}.overlay[hidden]{display:none}.option{padding:4px 8px;cursor:pointer}
+  .card{padding:6px;border:1px dashed #888;cursor:pointer;display:inline-block}.links{columns:6;font-size:11px}
+</style>
+<h1>Synthetic widget fixture</h1>
+<!-- Shapes modeled on Angular Material: role="tab" hosts, a mat-select whose
+     click listener sits on an inner trigger, and options in a detached overlay. -->
+<div class="tabs" role="tablist">
+  <div class="tab" role="tab" aria-selected="true" data-panel="overview"><span>Overview</span></div>
+  <div class="tab" role="tab" aria-selected="false" data-panel="dns"><span>DNS</span></div>
+  <div class="tab" role="tab" aria-selected="false" data-panel="nameservers"><span>Nameservers</span></div>
+</div>
+<p class="panel" id="panel">Panel: overview</p>
+<label id="type-label">Record type</label>
+<mat-select class="select" role="combobox" aria-labelledby="type-label" aria-expanded="false" tabindex="0"><div class="trigger"><span id="type-value">A</span> ▾</div></mat-select>
+<div class="overlay" id="overlay" role="listbox" hidden>
+  <mat-option class="option" role="option" aria-selected="true">A</mat-option>
+  <mat-option class="option" role="option" aria-selected="false">CNAME</mat-option>
+  <mat-option class="option" role="option" aria-selected="false">TXT</mat-option>
+</div>
+<p><label>TTL <select id="ttl"><option value="300">5 minutes</option><option value="3600">1 hour</option></select></label></p>
+<p><span class="card" id="card"><b>Refresh</b> records</span></p>
+<p id="status">Status: idle</p>
+<div class="links" id="links"></div>
+<script>
+  const tabs=[...document.querySelectorAll('[role=tab]')];
+  for (const tab of tabs) tab.addEventListener('click',()=>{
+    for (const other of tabs) other.setAttribute('aria-selected',String(other===tab));
+    document.getElementById('panel').textContent='Panel: '+tab.dataset.panel;
+  });
+  const select=document.querySelector('mat-select'), overlay=document.getElementById('overlay');
+  // Like MatSelect, only the inner trigger opens the panel; clicking the host itself does nothing.
+  select.querySelector('.trigger').addEventListener('click',()=>{overlay.hidden=false;select.setAttribute('aria-expanded','true');});
+  for (const option of overlay.querySelectorAll('[role=option]')) option.addEventListener('click',()=>{
+    for (const other of overlay.querySelectorAll('[role=option]')) other.setAttribute('aria-selected',String(other===option));
+    document.getElementById('type-value').textContent=option.textContent;
+    overlay.hidden=true;select.setAttribute('aria-expanded','false');
+  });
+  // A framework-style handler with no role, tabindex or onclick attribute.
+  document.getElementById('card').addEventListener('click',()=>{document.getElementById('status').textContent='Status: refreshed';});
+  document.getElementById('ttl').addEventListener('change',e=>{document.getElementById('status').textContent='Status: ttl '+e.target.value;});
+  // Enough links, placed before the widgets, to exceed the element cap and check role priority.
+  const links=document.getElementById('links');
+  for (let i=0;i<200;i++){const a=document.createElement('a');a.href='#l'+i;a.textContent='Link '+i;links.append(a,' ');}
+  document.body.prepend(links);
+</script>

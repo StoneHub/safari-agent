@@ -1,4 +1,7 @@
-const grants = new Map();
+const grants = new Map(), outgoing = new Map();
+// Remember the document a navigation is replacing, so a reload of the same URL
+// cannot re-grant the old page before the new one replaces it.
+function release(id) { const document = grants.get(id)?.document; if (document) outgoing.set(id,document); grants.delete(id); }
 let pairing = null, polling = false, results = [], status = 'Connecting automatically', generation = 0;
 let stopped = true, initialized = false, controller = null, nativePort = null;
 const connectionId = crypto.randomUUID();
@@ -9,7 +12,9 @@ const safeURL = url => {
   try { const parsed = new URL(url); return ['http:', 'https:'].includes(parsed.protocol) && !!parsed.hostname; }
   catch { return false; }
 };
-const normalTab = tab => Number.isInteger(tab?.id) && tab.incognito === false && safeURL(tab.url) && tab.status !== 'loading';
+// Loading tabs stay eligible: their new document is granted once it reports
+// the tab's URL and has parsed (readyState interactive), not at the load event.
+const eligibleTab = tab => Number.isInteger(tab?.id) && tab.incognito === false && safeURL(tab.url);
 async function hostAllowed(url) {
   if (!safeURL(url)) return false;
   try {
@@ -34,9 +39,10 @@ async function discover(epoch) {
   if (!valid()) return [];
   const allowed = [];
   const present = new Set();
+  let loadingSkipped = false;
   for (const tab of tabs.slice(0,500)) {
     if (!valid()) break;
-    if (!normalTab(tab) || !(await hostAllowed(tab.url))) { grants.delete(tab.id); continue; }
+    if (!eligibleTab(tab) || !(await hostAllowed(tab.url))) { grants.delete(tab.id); continue; }
     if (!valid()) break;
     try {
       let grant = grants.get(tab.id), document;
@@ -47,20 +53,30 @@ async function discover(epoch) {
         await browser.scripting.executeScript({target:{tabId:tab.id},files:['content.js']});
         if (!valid()) break;
         document = await browser.tabs.sendMessage(tab.id,{kind:'identify'});
+        if (!valid()) break;
+        if (tab.status === 'loading') {
+          // Never bind the outgoing document, or one still parsing, to the new URL.
+          const state = await browser.tabs.sendMessage(tab.id,{kind:'state'});
+          if (!valid()) break;
+          if (document === outgoing.get(tab.id) || state?.url !== tab.url || !['interactive','complete'].includes(state?.ready)) { grants.delete(tab.id); loadingSkipped = true; continue; }
+        }
         grant = {url:tab.url,document,grantId:crypto.randomUUID()};
       }
       const latest = await browser.tabs.get(tab.id);
       if (!valid()) break;
-      if (!normalTab(latest) || latest.url !== tab.url || typeof document !== 'string' || !document || document.length > 128) {
+      if (!eligibleTab(latest) || latest.url !== tab.url || typeof document !== 'string' || !document || document.length > 128) {
         grants.delete(tab.id); continue;
       }
       grants.set(tab.id,grant); present.add(tab.id);
+      if (latest.status !== 'loading') outgoing.delete(tab.id);
       allowed.push({id:tab.id,url:tab.url,title:latest.title || '',grantId:grant.grantId});
-    } catch { grants.delete(tab.id); }
+    } catch { grants.delete(tab.id); if (tab.status === 'loading') loadingSkipped = true; }
   }
   if (!valid()) return [];
   for (const id of grants.keys()) if (!present.has(id)) grants.delete(id);
-  cachedDiscovery = {epoch,version,at:Date.now(),tabs:allowed};
+  // While a page is still loading, rediscover on every sync instead of caching
+  // its absence for five seconds.
+  cachedDiscovery = loadingSkipped ? null : {epoch,version,at:Date.now(),tabs:allowed};
   return allowed;
 }
 async function connect(epoch) {
@@ -120,13 +136,13 @@ async function sync() {
         const tab = await browser.tabs.get(command.args?.tabId);
         const grant = grants.get(command.args?.tabId);
         if (!current(epoch)) throw new Error('Access stopped');
-        if (!normalTab(tab) || !grant || command.grantId !== grant.grantId || tab.url !== grant.url || !(await hostAllowed(tab.url))) throw new Error('Document access expired');
+        if (!eligibleTab(tab) || !grant || command.grantId !== grant.grantId || tab.url !== grant.url || !(await hostAllowed(tab.url))) throw new Error('Document access expired');
         if (!current(epoch) || grants.get(tab.id) !== grant) throw new Error('Access stopped or document changed');
         let result;
         if (command.name === 'navigate') {
           if (!(await hostAllowed(command.args.url))) throw new Error('Browser website access required');
           if (!current(epoch) || grants.get(tab.id) !== grant) throw new Error('Access stopped or document changed');
-          grants.delete(tab.id);
+          release(tab.id);
           await browser.tabs.update(tab.id,{url:command.args.url});
           result = {navigating:true,documentAccessRefreshing:true};
         } else {
@@ -151,10 +167,10 @@ async function sync() {
   }
 }
 function invalidate() { generation++; grants.clear(); results = []; invalidateDiscovery(); controller?.abort(); }
-browser.tabs.onRemoved.addListener(id => { grants.delete(id); invalidateDiscovery(); void sync(); });
+browser.tabs.onRemoved.addListener(id => { grants.delete(id); outgoing.delete(id); invalidateDiscovery(); void sync(); });
 browser.tabs.onUpdated.addListener((id, change) => {
   invalidateDiscovery();
-  if (change.url || change.status === 'loading') grants.delete(id);
+  if (change.url || change.status === 'loading') release(id);
   void sync();
 });
 browser.tabs.onCreated?.addListener(() => { invalidateDiscovery(); void sync(); });

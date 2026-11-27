@@ -13,14 +13,14 @@ async function harness(options={}) {
  const stored = options.stored || {};
  const tab = {id:7,url:'https://example.test/form',title:'Synthetic fixture',incognito:false,status:'complete'};
  const tabs = options.tabs || [tab];
- let commands=[], documentId='doc-1', holdFetch=null, holdResult=null, now=1000000;
+ let commands=[], documentId='doc-1', holdFetch=null, holdResult=null, now=1000000, readyState=options.ready || 'complete', pageURL=null;
  const eventListeners={}, counts={queries:0};
  const events = name => ({addListener(fn){if(name)eventListeners[name]=fn;}});
  const browser = {
   runtime:{id:'fixture',getURL:path=>'safari-web-extension://fixture/'+path,onMessage:{addListener:f=>listener=f},onStartup:events(),onInstalled:events(),connectNative:()=>({onMessage:{addListener:f=>nativeMessage=f},onDisconnect:{addListener:f=>nativeDisconnected=f},disconnect:()=>nativeDisconnected?.()}),sendNativeMessage:async(app,msg)=>{nativeCalls.push({app,msg});return options.nativeReply || {ok:true,version:1,token:'a'.repeat(64),port:19447};}},
   storage:{local:{get:async defaults=>({...defaults,...stored}),set:async value=>Object.assign(stored,value)}},
   permissions:{contains:async({origins})=>{permissionChecks.push(...origins);return options.permissionCheck ? options.permissionCheck(origins) : !origins.some(origin=>origin.startsWith('https://denied.test'));},onRemoved:events(),onAdded:events()},
-  tabs:{onCreated:events('created'),onActivated:events(),onRemoved:{addListener:f=>removed=f},onUpdated:{addListener:f=>updated=f},get:async id=>({...tabs.find(t=>t.id===id)}),query:async()=>{counts.queries++;return tabs.map(t=>({...t}));},update:async(id,{url})=>{tab.url=url;tab.status='loading';updated(id,{url,status:'loading'});},sendMessage:async(id,msg)=>{sent.push(msg);if(msg.kind==='identify')return documentId; if(holdResult){const gate=holdResult;holdResult=null;await gate.promise;}return {text:'Fixture'};}},
+  tabs:{onCreated:events('created'),onActivated:events(),onRemoved:{addListener:f=>removed=f},onUpdated:{addListener:f=>updated=f},get:async id=>({...tabs.find(t=>t.id===id)}),query:async()=>{counts.queries++;return tabs.map(t=>({...t}));},update:async(id,{url})=>{tab.url=url;tab.status='loading';updated(id,{url,status:'loading'});},sendMessage:async(id,msg)=>{sent.push(msg);if(msg.kind==='identify')return documentId;if(msg.kind==='state')return {url:pageURL ?? tabs.find(t=>t.id===id).url,ready:readyState}; if(holdResult){const gate=holdResult;holdResult=null;await gate.promise;}return {text:'Fixture'};}},
   scripting:{executeScript:async options=>{injections.push(options);}}
  };
  class Clock extends Date {static now(){return now;}}
@@ -35,6 +35,9 @@ async function harness(options={}) {
   create:async newTab=>{tabs.push(newTab);eventListeners.created(newTab);await flush();},
   send:(msg,sender=popup)=>listener(msg,sender),
   tick:async()=>{interval();await flush();},
+  load:async({document,url,ready})=>{tab.status='loading';updated(7,{status:'loading',...(url?{url}:{})});if(url)tab.url=url;pageURL=null;await flush();if(document)documentId=document;readyState=ready;await flush();},
+  page:({document,url,ready})=>{if(document)documentId=document;if(url!==undefined)pageURL=url;if(ready)readyState=ready;},
+  complete:async()=>{tab.status='complete';readyState='complete';pageURL=null;updated(7,{status:'complete'});await flush();},
   navigate:async()=>{tab.status='loading';updated(7,{status:'loading'});await flush();documentId='doc-2';tab.status='complete';updated(7,{status:'complete'});await flush();},
   commands:c=>{commands=c.map(command=>({...command,grantId:command.grantId ?? requests.at(-1)?.tabs.find(t=>t.id===command.args.tabId)?.grantId}));},
   holdFetch:()=>{const gate=deferred();holdFetch=gate;return gate;},
@@ -77,7 +80,7 @@ test('idle syncs reuse discovery for five seconds but new tabs and navigation re
  await h.navigate();
  assert.notEqual(h.requests.at(-1).tabs.find(tab=>tab.id===7).grantId,old,'navigation refreshes nonce without a clock advance');
 });
-test('private, denied-host, loading and non-HTTP tabs never appear or receive injection',async()=>{
+test('private, denied-host and non-HTTP tabs never appear or receive injection; loading tabs wait for their document',async()=>{
  const tabs=[
   {id:1,url:'https://allowed.test/',incognito:false},
   {id:2,url:'https://private.test/',incognito:true},
@@ -86,9 +89,34 @@ test('private, denied-host, loading and non-HTTP tabs never appear or receive in
   {id:5,url:'https://unknown-window.test/'},
   {id:6,url:'https://loading.test/',incognito:false,status:'loading'}
  ];
- const h=await harness({tabs});
+ const h=await harness({tabs,ready:'loading'});
+ h.advance(6000);await h.tick();
  assert.deepEqual(h.requests.at(-1).tabs.map(t=>t.id),[1]);
- assert.deepEqual(h.injections.map(x=>x.target.tabId),[1]);
+ assert.deepEqual([...new Set(h.injections.map(x=>x.target.tabId))],[1,6]);
+});
+test('a navigating tab returns as soon as its new document has parsed, not at the load event',async()=>{
+ const h=await harness();const old=h.requests.at(-1).tabs[0].grantId;
+ await h.load({url:'https://example.test/next',ready:'loading'});
+ assert.deepEqual(h.requests.at(-1).tabs,[],'outgoing or unparsed documents are not granted');
+ h.page({url:'https://example.test/form',ready:'complete'});await h.tick();
+ assert.deepEqual(h.requests.at(-1).tabs,[],'the old document never binds to the new URL');
+ h.page({document:'doc-2',url:null,ready:'interactive'});await h.tick();
+ const fresh=h.requests.at(-1).tabs[0];
+ assert.equal(fresh?.url,'https://example.test/next');assert.notEqual(fresh.grantId,old);
+ h.commands([{id:'early',name:'read_page',args:{tabId:7}}]);await h.tick();
+ assert.equal(h.sent.at(-1).document,'doc-2','commands work while the page is still loading');
+ await h.complete();
+ assert.equal(h.requests.at(-1).tabs[0].grantId,fresh.grantId,'load completion keeps the same document grant');
+});
+test('reloading the same URL never re-grants the outgoing document',async()=>{
+ const h=await harness();
+ await h.load({ready:'complete'});
+ for(let i=0;i<3;i++){await h.tick();}
+ assert.deepEqual(h.requests.at(-1).tabs,[],'old document still answering during reload');
+ h.page({document:'doc-2',ready:'interactive'});await h.tick();
+ assert.equal(h.requests.at(-1).tabs[0]?.id,7);
+ h.commands([{id:'fresh',name:'read_page',args:{tabId:7}}]);await h.tick();
+ assert.equal(h.sent.at(-1).document,'doc-2');
 });
 test('navigation automatically discovers fresh document access and rejects old commands',async()=>{
  const h=await harness(); const old=h.requests.at(-1).tabs[0].grantId;
