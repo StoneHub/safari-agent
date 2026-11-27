@@ -37,7 +37,7 @@ export async function connect() {
   const heartbeat=setInterval(()=>lease(true).catch(()=>{}),15000);
   return {
     call:async(name,args)=>{
-      try{return await connectionRequest(connection,'/call',{name,args:args||{}},18000);}
+      try{return await connectionRequest(connection,'/call',{name,args:args||{}},30000);}
       catch{throw new Error('Safari bridge connection lost; outcome unknown. Inspect before retrying an action.');}
     },
     close:async()=>{clearInterval(heartbeat);await lease(false).catch(()=>{});}

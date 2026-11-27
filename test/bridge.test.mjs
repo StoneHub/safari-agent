@@ -6,9 +6,10 @@ import readline from 'node:readline';
 import { Broker } from '../src/broker.mjs';
 import { createTransport } from '../src/transport.mjs';
 const token = 'fixture-only-not-a-real-token-'.repeat(2);
+const fixture = {id:1,grantId:'grant-1',url:'https://example.test'};
 
 test('grants, queue delivery, results, revocation and scheme validation', async () => {
- const broker = new Broker();
+ const broker = new Broker({tabWait:20});
  await assert.rejects(broker.call('read_page',{tabId:1}),/unavailable/);
  broker.sync([{id:1,grantId:'grant-1',url:'https://example.test',title:'Fixture'},{id:2,url:'file:///secret',title:'Hidden'}]);
  assert.equal((await broker.call('list_tabs')).length,1);
@@ -49,7 +50,7 @@ test('MCP stdio initializes and advertises automatic-tab tools without starting 
  t.after(()=>{child.stdin.end();child.kill();});
  const responses=readline.createInterface({input:child.stdout})[Symbol.asyncIterator]();
  const request=async(id,method,params)=>{child.stdin.write(JSON.stringify({jsonrpc:'2.0',id,method,params})+'\n');return JSON.parse((await responses.next()).value);};
- assert.equal((await request(1,'initialize',{})).result.serverInfo.version,'0.2.2');
+ assert.equal((await request(1,'initialize',{})).result.serverInfo.version,'0.2.3');
  const tools=(await request(2,'tools/list')).result.tools;
  assert.deepEqual(tools.map(t=>t.name),['list_tabs','read_page','click','type','navigate']);
  assert.match(tools[0].description,/open Safari/);
@@ -80,5 +81,57 @@ test('out-of-order sync cannot restore access after Stop or a new background ses
  broker.sync([],[],{connectionId:'00000000-0000-4000-8000-000000000002',sequence:1});
  broker.sync(tabs,[],{connectionId:session,sequence:4});
  assert.deepEqual(await broker.call('list_tabs'),[]);
+ broker.close();
+});
+
+test('a call during navigation waits for the tab to return instead of failing at once', async () => {
+ const broker = new Broker({tabWait:2000});
+ broker.sync([fixture]);
+ broker.sync([]); // the tab is loading its next document
+ const started = Date.now();
+ const pending = broker.call('read_page',{tabId:1});
+ setTimeout(() => broker.sync([{...fixture,grantId:'grant-2'}]),30);
+ await new Promise(resolve => setTimeout(resolve,50));
+ const [job] = broker.sync([{...fixture,grantId:'grant-2'}]);
+ assert.equal(job.grantId,'grant-2','the waiting call binds to the new document');
+ broker.sync([{...fixture,grantId:'grant-2'}],[{id:job.id,result:{text:'Next page'}}]);
+ assert.deepEqual(await pending,{text:'Next page'});
+ assert.ok(Date.now()-started < 1000);
+ await assert.rejects(broker.call('read_page',{tabId:99}),/unavailable/,'never-listed tabs still fail immediately');
+ broker.close();
+});
+
+test('waiting for a tab gives up after the limit and on close', async () => {
+ const broker = new Broker({tabWait:30});
+ broker.sync([fixture]); broker.sync([]);
+ await assert.rejects(broker.call('read_page',{tabId:1}),/unavailable/);
+ const slow = new Broker({tabWait:60000}); slow.sync([fixture]); slow.sync([]);
+ const pending = slow.call('read_page',{tabId:1}); slow.close();
+ await assert.rejects(pending,/unavailable/);
+});
+
+test('click and type accept exactly one target', async () => {
+ const broker = new Broker(); broker.sync([fixture]);
+ await assert.rejects(broker.call('click',{tabId:1}),/exactly one/);
+ await assert.rejects(broker.call('click',{tabId:1,handle:'h',text:'Save'}),/exactly one/);
+ await assert.rejects(broker.call('click',{tabId:1,selector:7}),/exactly one/);
+ await assert.rejects(broker.call('type',{tabId:1,text:'x'}),/exactly one/);
+ await assert.rejects(broker.call('type',{tabId:1,selector:'#name'}),/Text/);
+ for (const args of [{handle:'h'},{selector:'[role=tab]'},{text:'DNS'}]) broker.call('click',{tabId:1,...args}).catch(()=>{});
+ broker.call('type',{tabId:1,selector:'#name',text:'Ada'}).catch(()=>{});
+ assert.deepEqual(broker.sync([fixture]).map(job => job.name),['click','click','click','type']);
+ broker.close();
+});
+
+test('Stop ends a wait at once so the call cannot run after Resume', async () => {
+ const broker = new Broker({tabWait:60000});
+ const session = '00000000-0000-4000-8000-000000000001';
+ broker.sync([fixture],[],{connectionId:session,sequence:1});
+ broker.sync([],[],{connectionId:session,sequence:2});
+ const pending = broker.call('click',{tabId:1,text:'Delete'});
+ broker.sync([],[],{connectionId:session,sequence:3,stopped:true});
+ await assert.rejects(pending,/unavailable/);
+ assert.deepEqual(broker.sync([{...fixture,grantId:'after-resume'}],[],{connectionId:session,sequence:4}),[]);
+ await assert.rejects(broker.call('click',{tabId:1,text:'x'.repeat(501)}),/500/);
  broker.close();
 });

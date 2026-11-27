@@ -47,7 +47,8 @@ The popup opens from the compass-shaped Safari Agent button beside Safari's addr
 5. Stop access. Verify metadata/action access stops and stale queued commands stay rejected. Restart the background context and verify Stop remains in effect. Resume and verify automatic rediscovery with fresh identities.
 6. Test denied website permission, unsupported pages and private windows. They must stay unavailable. Restore only the website permission the operator intends.
 7. Leave the popup closed and Safari idle long enough for background suspension. Trigger a new explicit agent request; measure recovery latency and document the result. Repeat after bridge restart. Do not infer wakeup reliability from a timer or successful startup alone.
-8. Repeat a read-only question through the Apple FM client. Record actual model tool calls separately from deterministic client checks. `--check-model` may receive eligible tab metadata under the new policy; it exposes no page-reading tool.
+8. Serve `fixtures/widgets.html` the same way. Verify `read_page` lists its tabs, the `mat-select` combobox and (after opening it) its options; click a tab, open the dropdown and pick an option; click "Refresh records" by text; choose a TTL with `type`. Then `navigate` and call `read_page` immediately: it should wait and succeed rather than return "Tab is unavailable".
+9. Repeat a read-only question through the Apple FM client. Record actual model tool calls separately from deterministic client checks. `--check-model` may receive eligible tab metadata under the new policy; it exposes no page-reading tool.
 
 Retain revision, app/browser versions, tool names, measured recovery timing and pass/fail only. Stop the synthetic HTTP server afterward. Do not copy connection descriptors, session credentials, real tab lists or page content into issues or shared logs.
 

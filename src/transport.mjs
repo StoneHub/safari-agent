@@ -19,7 +19,7 @@ export function createTransport(broker, token, options = {}) {
       let result;
       if (req.url === '/sync') {
         if (!Array.isArray(data.tabs) || !Array.isArray(data.results) || data.tabs.length > 500 || data.results.length > 16 || typeof data.connectionId !== 'string' || !/^[a-f0-9-]{36}$/.test(data.connectionId) || !Number.isSafeInteger(data.sequence) || data.sequence < 0) throw new Error('Invalid sync');
-        result={commands:broker.sync(data.tabs,data.results,{connectionId:data.connectionId,sequence:data.sequence})};
+        result={commands:broker.sync(data.tabs,data.results,{connectionId:data.connectionId,sequence:data.sequence,stopped:data.stopped===true})};
       } else if (req.url === '/status' && options.status) result=options.status();
       else if (req.url === '/lease' && options.lease) result=options.lease(data);
       else if (req.url === '/call' && options.wake) {
