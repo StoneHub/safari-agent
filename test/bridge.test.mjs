@@ -122,3 +122,16 @@ test('click and type accept exactly one target', async () => {
  assert.deepEqual(broker.sync([fixture]).map(job => job.name),['click','click','click','type']);
  broker.close();
 });
+
+test('Stop ends a wait at once so the call cannot run after Resume', async () => {
+ const broker = new Broker({tabWait:60000});
+ const session = '00000000-0000-4000-8000-000000000001';
+ broker.sync([fixture],[],{connectionId:session,sequence:1});
+ broker.sync([],[],{connectionId:session,sequence:2});
+ const pending = broker.call('click',{tabId:1,text:'Delete'});
+ broker.sync([],[],{connectionId:session,sequence:3,stopped:true});
+ await assert.rejects(pending,/unavailable/);
+ assert.deepEqual(broker.sync([{...fixture,grantId:'after-resume'}],[],{connectionId:session,sequence:4}),[]);
+ await assert.rejects(broker.call('click',{tabId:1,text:'x'.repeat(501)}),/500/);
+ broker.close();
+});

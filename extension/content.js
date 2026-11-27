@@ -70,12 +70,11 @@
     const exact = listed.filter(el => labelOf(el).toLowerCase() === wanted);
     if (exact.length) return single(exact,'text');
     // Framework click handlers leave no trace in the DOM, so fall back to the
-    // innermost visible element whose own text matches, then its nearest control.
+    // innermost visible element whose own text matches exactly.
+    // The click lands on that text element and bubbles to the handler.
     const all = [...(document.body?.querySelectorAll('*') || [])].slice(0,5000);
-    const textual = all.filter(el => clean(el.textContent).toLowerCase() === wanted && visible(el));
-    const innermost = textual.filter(el => !textual.some(other => other !== el && el.contains(other)));
-    if (innermost.length) return single([...new Set(innermost.map(el => el.closest(interactive) || el))],'text');
-    return single(listed.filter(el => labelOf(el).toLowerCase().includes(wanted)),'text');
+    const textual = all.filter(el => (el.textContent || '').length < wanted.length*4+200 && clean(el.textContent).toLowerCase() === wanted && visible(el));
+    return single(textual.filter(el => !textual.some(other => other !== el && el.contains(other))),'text');
   };
   const target = args => {
     if (typeof args.handle === 'string') return usable(handles.get(args.handle));
@@ -107,6 +106,11 @@
       const clientX = box.left + box.width/2, clientY = box.top + box.height/2;
       const top = document.elementFromPoint?.(clientX,clientY);
       hit = top && el.contains(top) ? top : innermostAt(el,clientX,clientY);
+      // SVG icons have no click(); and never hand the click to a different
+      // control nested inside the target (e.g. a button inside a card link).
+      while (hit !== el && typeof hit.click !== 'function') hit = hit.parentElement || el;
+      const control = hit === el ? el : hit.closest?.(interactive);
+      if (control && control !== el && el.contains(control)) hit = el;
       const init = {bubbles:true,cancelable:true,composed:true,clientX,clientY,button:0};
       const pointer = typeof PointerEvent === 'function', mouse = typeof MouseEvent === 'function';
       if (pointer) hit.dispatchEvent(new PointerEvent('pointerdown',{...init,buttons:1,pointerType:'mouse',isPrimary:true}));

@@ -8,6 +8,7 @@ const connectionId = crypto.randomUUID();
 let sequence = 0;
 let discoveryVersion = 0, cachedDiscovery = null;
 function invalidateDiscovery() { discoveryVersion++; cachedDiscovery = null; }
+const within = (promise, ms) => Promise.race([promise,new Promise((_,reject) => setTimeout(() => reject(new Error('Timed out')),ms))]);
 const safeURL = url => {
   try { const parsed = new URL(url); return ['http:', 'https:'].includes(parsed.protocol) && !!parsed.hostname; }
   catch { return false; }
@@ -50,13 +51,15 @@ async function discover(epoch) {
         try { document = await browser.tabs.sendMessage(tab.id,{kind:'identify'}); } catch { grant = null; }
       }
       if (!grant || grant.url !== tab.url || document !== grant.document) {
-        await browser.scripting.executeScript({target:{tabId:tab.id},files:['content.js']});
+        // A page still loading must not stall discovery for every other tab.
+        const bounded = promise => tab.status === 'loading' ? within(promise,1500) : promise;
+        await bounded(browser.scripting.executeScript({target:{tabId:tab.id},files:['content.js']}));
         if (!valid()) break;
-        document = await browser.tabs.sendMessage(tab.id,{kind:'identify'});
+        document = await bounded(browser.tabs.sendMessage(tab.id,{kind:'identify'}));
         if (!valid()) break;
         if (tab.status === 'loading') {
           // Never bind the outgoing document, or one still parsing, to the new URL.
-          const state = await browser.tabs.sendMessage(tab.id,{kind:'state'});
+          const state = await bounded(browser.tabs.sendMessage(tab.id,{kind:'state'}));
           if (!valid()) break;
           if (document === outgoing.get(tab.id) || state?.url !== tab.url || !['interactive','complete'].includes(state?.ready)) { grants.delete(tab.id); loadingSkipped = true; continue; }
         }
@@ -120,7 +123,7 @@ async function sync() {
     const timeout = setTimeout(() => requestController.abort(),5000);
     let response;
     try {
-      response = await fetch(`http://127.0.0.1:${connection.port}/sync`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${connection.token}`},body:JSON.stringify({tabs,results,connectionId,sequence:++sequence}),signal:requestController.signal});
+      response = await fetch(`http://127.0.0.1:${connection.port}/sync`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${connection.token}`},body:JSON.stringify({tabs,results,connectionId,sequence:++sequence,stopped}),signal:requestController.signal});
     } finally { clearTimeout(timeout); }
     if (!response.ok) throw new Error('Bridge unavailable');
     const data = await response.json();
@@ -170,7 +173,9 @@ function invalidate() { generation++; grants.clear(); results = []; invalidateDi
 browser.tabs.onRemoved.addListener(id => { grants.delete(id); outgoing.delete(id); invalidateDiscovery(); void sync(); });
 browser.tabs.onUpdated.addListener((id, change) => {
   invalidateDiscovery();
-  if (change.url || change.status === 'loading') release(id);
+  // Only a new load retires the document; a history-API URL change keeps it.
+  if (change.status === 'loading') release(id);
+  else if (change.url) grants.delete(id);
   void sync();
 });
 browser.tabs.onCreated?.addListener(() => { invalidateDiscovery(); void sync(); });

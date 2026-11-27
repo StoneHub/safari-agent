@@ -8,7 +8,7 @@ export class Broker {
   constructor({tabWait = 12000, recentTab = 60000} = {}) { this.tabWait = tabWait; this.recentTab = recentTab; }
   sync(tabs, results = [], metadata) {
     if (metadata) {
-      const {connectionId,sequence}=metadata;
+      const {connectionId,sequence,stopped}=metadata;
       if (this.retiredConnections.has(connectionId)) return [];
       if (connectionId !== this.connectionId) {
         if (this.connectionId) this.retiredConnections.add(this.connectionId);
@@ -21,6 +21,8 @@ export class Broker {
     for (const ready of this.waiters) ready();
     this.waiters.clear();
     this.tabs = tabs.filter(t => t && Number.isInteger(t.id) && typeof t.grantId === 'string' && t.grantId.length > 0 && /^https?:\/\//.test(t.url)).map(({id,url,title,grantId}) => ({id,url,title,grantId}));
+    // Stop ends any wait: a call made while stopped must not run after Resume.
+    if (metadata?.stopped) this.seen.clear();
     for (const t of this.tabs) this.seen.set(t.id,this.lastSync);
     for (const [id,time] of this.seen) if (this.lastSync - time > this.recentTab) this.seen.delete(id);
     for (const r of results) {
@@ -43,6 +45,7 @@ export class Broker {
       if (name === 'navigate' && !/^https?:\/\//.test(args.url || '')) throw new Error('Only HTTP(S) navigation allowed');
       if (name === 'click' && !(exactlyOne(args.handle,args.selector,args.text) && [args.handle,args.selector,args.text].every(v => v === undefined || typeof v === 'string'))) throw new Error('Element handle, selector or text required (exactly one)');
       if (name === 'type' && !(exactlyOne(args.handle,args.selector) && [args.handle,args.selector].every(v => v === undefined || typeof v === 'string'))) throw new Error('Element handle or selector required (exactly one)');
+      if (name === 'click' && ((args.text ?? '').length > 500 || (args.selector ?? '').length > 1000)) throw new Error('Click text is limited to 500 characters and selectors to 1000');
       if (name === 'type' && (typeof args.text !== 'string' || args.text.length > 10000)) throw new Error('Text must be at most 10000 characters');
       // Queue synchronously when the tab is listed, so the command binds to the
       // grant current at call time; otherwise wait for a recently listed tab.
@@ -67,7 +70,7 @@ export class Broker {
     if (seen === undefined || Date.now() - seen > this.recentTab) return false;
     if (this.tabWait <= 0) return false;
     const deadline = Date.now() + this.tabWait;
-    while (!present() && !this.closed && Date.now() < deadline) {
+    while (!present() && !this.closed && this.seen.has(tabId) && Date.now() < deadline) {
       await new Promise(resolve => {
         const ready=()=>{clearTimeout(timer);this.waiters.delete(ready);resolve();};
         const timer=setTimeout(ready,Math.max(0,deadline-Date.now()));this.waiters.add(ready);

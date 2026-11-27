@@ -32,6 +32,7 @@ async function harness(options={}) {
  await flush();
  return {tab,tabs,sent,requests,stored,nativeCalls,injections,counts,permissionChecks,
   advance:ms=>{now+=ms;},
+  updated:(id,change)=>updated(id,change),
   create:async newTab=>{tabs.push(newTab);eventListeners.created(newTab);await flush();},
   send:(msg,sender=popup)=>listener(msg,sender),
   tick:async()=>{interval();await flush();},
@@ -107,6 +108,14 @@ test('a navigating tab returns as soon as its new document has parsed, not at th
  assert.equal(h.sent.at(-1).document,'doc-2','commands work while the page is still loading');
  await h.complete();
  assert.equal(h.requests.at(-1).tabs[0].grantId,fresh.grantId,'load completion keeps the same document grant');
+});
+test('a history-API URL change while loading keeps the new document granted',async()=>{
+ const h=await harness();
+ await h.load({url:'https://example.test/next',document:'doc-2',ready:'interactive'});await h.tick();
+ const granted=h.requests.at(-1).tabs[0];assert.equal(granted?.url,'https://example.test/next');
+ h.tab.url='https://example.test/next?x=1';h.page({url:'https://example.test/next?x=1'});
+ h.updated(7,{url:h.tab.url});await h.tick();
+ assert.equal(h.requests.at(-1).tabs[0]?.url,'https://example.test/next?x=1');
 });
 test('reloading the same URL never re-grants the outgoing document',async()=>{
  const h=await harness();
